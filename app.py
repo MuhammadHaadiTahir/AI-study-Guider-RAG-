@@ -1,8 +1,5 @@
 import streamlit as st
 import fitz  # PyMuPDF
-import pytesseract
-from PIL import Image
-import io
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
@@ -37,19 +34,18 @@ elif "GROQ_API_KEY" in st.secrets:
     st.success("API Key loaded from Streamlit secrets.")
 
 st.header("2. Upload Materials")
-uploaded_files = st.file_uploader("Upload PDFs or Images", type=['pdf', 'png', 'jpg', 'jpeg'], accept_multiple_files=True)
+# Updated to only accept PDF files
+uploaded_files = st.file_uploader("Upload PDFs", type=['pdf'], accept_multiple_files=True)
 
 if st.button("Process Documents") and uploaded_files:
     with st.spinner("Extracting text and building vector space..."):
         all_text = ""
         for file in uploaded_files:
+            # Removed the else block for images; processes PDFs only
             if file.name.lower().endswith('.pdf'):
                 doc = fitz.open(stream=file.read(), filetype="pdf")
                 for page in doc:
                     all_text += page.get_text() + "\n"
-            else:
-                img = Image.open(file)
-                all_text += pytesseract.image_to_string(img) + "\n"
         
         chunk_size = 600
         overlap = 100
@@ -68,4 +64,4 @@ if st.button("Process Documents") and uploaded_files:
             st.session_state.faiss_index = index
             st.success(f"Successfully processed {len(chunks)} text chunks! You can now use the Study Guider or Chat.")
         else:
-            st.error("No readable text could be extracted.")
+            st.error("No readable text could be extracted from the PDFs.")
