@@ -1,0 +1,9 @@
+streamlit
+PyMuPDF
+pytesseract
+Pillow
+sentence-transformers
+faiss-cpu
+groq
+duckduckgo-search
+numpy<2.0.0
