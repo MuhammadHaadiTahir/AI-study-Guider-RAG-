@@ -60,7 +60,7 @@ if st.button("Generate Study Materials", type="primary"):
                     
                 elif item == "Notes":
                     prompt = f"Context:\n{context}\n\nGenerate {notes_len} notes for the topic: '{goals}'."
-                    res = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": prompt}])
+                    res = client.chat.completions.create(model="openai/gpt-oss-120b", messages=[{"role": "user", "content": prompt}])
                     st.markdown(res.choices[0].message.content)
                     
                 elif item == "Exam Tips":
