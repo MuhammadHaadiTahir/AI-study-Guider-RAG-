@@ -40,7 +40,7 @@ if st.session_state.awaiting_web:
                     
                     client = Groq(api_key=st.session_state.api_key)
                     prompt = f"Web Results:\n{web_context}\n\nQuestion: {st.session_state.pending_query}\n\nAnswer thoroughly."
-                    res = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": prompt}])
+                    res = client.chat.completions.create(model=openai/gpt-oss-120b, messages=[{"role": "user", "content": prompt}])
                     
                     display_text = f"{res.choices[0].message.content}\n\n*(Sourced from live web search)*"
                     st.session_state.chat_history.append({"role": "assistant", "content": display_text})
