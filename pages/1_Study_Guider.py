@@ -50,7 +50,7 @@ if st.button("Generate Study Materials", type="primary"):
 
     tabs = st.tabs(deliverables) if deliverables else []
     
-    MODEL_NAME = "llama-3.1-8b-instant"
+    MODEL_NAME = "openai/gpt-oss-120b"
     
     for i, item in enumerate(deliverables):
         with tabs[i]:
