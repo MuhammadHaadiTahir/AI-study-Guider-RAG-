@@ -70,7 +70,7 @@ if query and not st.session_state.awaiting_web:
             user_prompt = f"<context>\n{context}\n</context>\n\nQuestion: {query}"
             
             res = client.chat.completions.create(
-                model="llama3-8b-8192",
+                model="openai/gpt-oss-120b",
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
             )
             
