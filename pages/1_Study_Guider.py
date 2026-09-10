@@ -128,10 +128,19 @@ if st.session_state.study_materials:
                     quiz_data = json.loads(output)
                     for q_idx, q in enumerate(quiz_data.get("quiz", [])):
                         st.markdown(f"**Q{q_idx + 1}: {q.get('question')}**")
-                        # The key ensures Streamlit tracks each radio button independently
+                        
+                        # The radio button starts empty (index=None)
                         ans = st.radio("Select an answer:", options=q.get('options', []), key=f"q_{item}_{q_idx}", index=None)
-                        with st.expander("Show Answer"):
-                            st.success(f"Correct Answer: {q.get('answer')}")
+                        
+                        # Only show the result AFTER the user clicks an option
+                        if ans is not None:
+                            if ans == q.get('answer'):
+                                st.success("✅ Correct!")
+                            else:
+                                st.error(f"❌ Incorrect. The correct answer is: **{q.get('answer')}**")
+                        
+                        st.divider() # Adds a clean line between questions
+                        
                 except Exception as e:
                     st.error("Failed to parse JSON for Quiz. Ensure the LLM outputs strict JSON.")
                     st.code(output)
