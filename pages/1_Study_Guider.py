@@ -55,7 +55,7 @@ if st.button("Generate Study Materials", type="primary"):
             with st.spinner(f"Generating {item}..."):
                 if item == "Study Plan":
                     prompt = f"Context:\n{context}\n\nCreate a structured study plan for '{goals}' spanning '{duration}'. Use Markdown tables where appropriate."
-                    res = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": prompt}])
+                    res = client.chat.completions.create(model="openai/gpt-oss-120b", messages=[{"role": "user", "content": prompt}])
                     st.markdown(res.choices[0].message.content)
                     
                 elif item == "Notes":
@@ -65,12 +65,12 @@ if st.button("Generate Study Materials", type="primary"):
                     
                 elif item == "Exam Tips":
                     prompt = f"Context:\n{context}\n\nProvide top exam preparation tips and common pitfalls regarding: '{goals}'."
-                    res = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": prompt}])
+                    res = client.chat.completions.create(model="openai/gpt-oss-120b", messages=[{"role": "user", "content": prompt}])
                     st.markdown(res.choices[0].message.content)
                     
                 elif item == "Flashcards":
                     prompt = f"Context:\n{context}\n\nCreate 5-10 flashcards for '{goals}'. ONLY output valid JSON like this: {{\"flashcards\": [{{\"term\": \"X\", \"definition\": \"Y\"}}]}}"
-                    res = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": prompt}])
+                    res = client.chat.completions.create(model="openai/gpt-oss-120b", messages=[{"role": "user", "content": prompt}])
                     try:
                         fc_data = json.loads(res.choices[0].message.content.strip())
                         for fc in fc_data.get("flashcards", []):
@@ -82,7 +82,7 @@ if st.button("Generate Study Materials", type="primary"):
                         
                 elif item == "Quiz":
                     prompt = f"Context:\n{context}\n\nGenerate a multiple-choice quiz with {mcq_count} questions about '{goals}'. ONLY output valid JSON. Format: {{\"quiz\": [{{\"question\": \"Q\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"answer\": \"A\"}}]}}. DO NOT wrap in markdown block."
-                    res = client.chat.completions.create(model="llama3-8b-8192", messages=[{"role": "user", "content": prompt}])
+                    res = client.chat.completions.create(model="openai/gpt-oss-120b", messages=[{"role": "user", "content": prompt}])
                     try:
                         quiz_data = json.loads(res.choices[0].message.content.strip())
                         for q_idx, q in enumerate(quiz_data.get("quiz", [])):
