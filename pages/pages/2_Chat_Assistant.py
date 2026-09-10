@@ -9,7 +9,6 @@ st.set_page_config(page_title="Chat Assistant | AI RAG", page_icon="💬", layou
 st.title("💬 RAG Chat Assistant")
 
 # Document upload is now OPTIONAL, so we only check for the API Key
-if not st.session_state.get("api_key"):
     st.warning("Please configure your API Key on the Home page first.")
     st.stop()
 
