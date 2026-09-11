@@ -2,8 +2,6 @@ import streamlit as st
 import fitz  # PyMuPDF
 import json
 import numpy as np
-from sentence_transformers import SentenceTransformer
-import faiss
 from groq import Groq
 
 st.set_page_config(page_title="AI Study Guider", page_icon="🧠", layout="wide")
@@ -20,14 +18,11 @@ if "study_materials" not in st.session_state:
 if "current_tabs" not in st.session_state:
     st.session_state.current_tabs = []
 
+# LAZY LOADING: PyTorch/SentenceTransformers will ONLY load when this function is called
 @st.cache_resource
 def load_embedder():
+    from sentence_transformers import SentenceTransformer
     return SentenceTransformer('all-MiniLM-L6-v2')
-
-try:
-    embedder = load_embedder()
-except Exception as e:
-    st.error(f"Failed to load embedder: {e}")
 
 MODEL_NAME = "openai/gpt-oss-120b"
 
@@ -50,7 +45,10 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Upload PDFs", type=['pdf'], accept_multiple_files=True)
 
     if st.button("Process Documents", use_container_width=True) and uploaded_files:
-        with st.spinner("Extracting text and building vector space..."):
+        with st.spinner("Initializing AI embedding model (this takes a moment on first run)..."):
+            embedder = load_embedder()
+            import faiss  # LAZY LOADING: FAISS only imports if documents are actually processed
+            
             all_text = ""
             for file in uploaded_files:
                 if file.name.lower().endswith('.pdf'):
@@ -115,14 +113,15 @@ if st.button("Generate Study Materials", type="primary"):
         st.stop()
         
     context = ""
-    # ONLY search FAISS if a document was actually uploaded
+    
+    # ONLY boot up the embedder and search FAISS if a document was actually uploaded
     if st.session_state.get("faiss_index") is not None:
         with st.spinner("Retrieving relevant context from PDFs..."):
+            embedder = load_embedder()
             query_embed = embedder.encode([goals])
             D, I = st.session_state.faiss_index.search(np.array(query_embed), k=6)
             context = "\n\n---\n\n".join([st.session_state.chunks[i] for i in I[0] if i < len(st.session_state.chunks)])
 
-    # Clear previous memory and prep for new generation
     st.session_state.study_materials = {}
     st.session_state.current_tabs = deliverables
     
@@ -150,7 +149,6 @@ if st.button("Generate Study Materials", type="primary"):
 
                 output = ""
 
-                # Branch A: We have document context to evaluate
                 if context:
                     eval_prompt = f"Context:\n{context}\n\nTask: {strict_task}\n\nCRITICAL INSTRUCTION: If the Context does not contain enough information about '{goals}' to fulfill this task, you MUST output exactly this string and nothing else: CONTEXT_MISSING"
                     res = client.chat.completions.create(model=MODEL_NAME, messages=[{"role": "user", "content": eval_prompt}])
@@ -161,12 +159,10 @@ if st.button("Generate Study Materials", type="primary"):
                         fallback_res = client.chat.completions.create(model=MODEL_NAME, messages=[{"role": "user", "content": fallback_task}])
                         output = fallback_res.choices[0].message.content.strip()
                 
-                # Branch B: No documents uploaded at all, go straight to fallback
                 else:
                     fallback_res = client.chat.completions.create(model=MODEL_NAME, messages=[{"role": "user", "content": fallback_task}])
                     output = fallback_res.choices[0].message.content.strip()
 
-                # Store the API output into session state memory
                 st.session_state.study_materials[item] = output
 
             except Exception as api_error:
