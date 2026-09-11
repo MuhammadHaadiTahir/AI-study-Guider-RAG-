@@ -15,8 +15,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] { border-radius: 4px 4px 0 0; padding: 10px 20px; background-color: #f0f2f6; }
     .stTabs [aria-selected="true"] { background-color: #ff4b4b; color: white; }
-    /* Style expanders */
-    .streamlit-expanderHeader { font-weight: 600; border-radius: 8px; }
     /* Headers */
     h1, h2, h3 { font-family: 'Inter', sans-serif; }
     </style>
@@ -42,10 +40,10 @@ def load_embedder():
 MODEL_NAME = "openai/gpt-oss-120b"
 
 # ==========================================
-# SIDEBAR: CONFIGURATION & DATA INGESTION
+# SIDEBAR: DATA INGESTION (Part 1)
 # ==========================================
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3303/3303319.png", width=60) # Small icon
+    st.image("https://cdn-icons-png.flaticon.com/512/3303/3303319.png", width=60)
     st.title("Setup & Documents")
     st.divider()
     
@@ -58,7 +56,7 @@ with st.sidebar:
         st.success("API Key loaded securely.")
 
     st.subheader("📚 2. Upload Materials")
-    st.markdown("*Optional: Upload PDFs to base your study materials on specific documents. If empty, the AI uses its general knowledge.*")
+    st.markdown("*Optional: Upload PDFs to base your study materials on specific documents.*")
     uploaded_files = st.file_uploader("Upload PDFs", type=['pdf'], accept_multiple_files=True, label_visibility="collapsed")
 
     if st.button("Process Documents", use_container_width=True) and uploaded_files:
@@ -93,7 +91,7 @@ with st.sidebar:
                 st.error("❌ No readable text could be extracted from the PDFs.")
 
 # ==========================================
-# MAIN PAGE: AI STUDY GUIDER
+# MAIN PAGE: PRIMARY INPUTS
 # ==========================================
 st.markdown("<h1 style='text-align: center;'>🎓 AI Study Guider</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #666;'>Transform your documents into personalized study plans, quizzes, and flashcards instantly.</p>", unsafe_allow_html=True)
@@ -105,7 +103,6 @@ if not st.session_state.get("api_key"):
 
 client = Groq(api_key=st.session_state.api_key)
 
-# --- Primary Input Area ---
 st.subheader("🎯 What are we learning today?")
 col1, col2 = st.columns([2, 1])
 with col1:
@@ -118,38 +115,40 @@ deliverables = st.multiselect("What would you like to generate?",
                              ["Study Plan", "Notes", "Flashcards", "Exam Tips", "Quiz"],
                              default=["Study Plan", "Notes"], label_visibility="collapsed")
 
-# --- De-cluttered Advanced Settings ---
-with st.expander("⚙️ Advanced Generation Settings"):
-    st.markdown("Fine-tune how the AI generates your content.")
-    set_col1, set_col2, set_col3 = st.columns(3)
+# ==========================================
+# SIDEBAR: ADVANCED SETTINGS (Part 2)
+# ==========================================
+# We place this here so it can dynamically read the 'deliverables' selected on the main page
+with st.sidebar:
+    st.divider()
+    st.subheader("⚙️ 3. Advanced Settings")
     
-    with set_col1:
-        tech_level = st.selectbox("Technicality Level", ["Beginner", "Intermediate", "Advanced"], index=1)
-        if "Notes" in deliverables:
-            notes_len = st.selectbox("Notes Length", ["Short (Summary)", "Medium (Outline)", "Long (Detailed)"], index=1)
-        else:
-            notes_len = "Medium (Outline)"
-            
-    with set_col2:
-        response_size = st.selectbox("Overall Detail Size", ["Short", "Medium", "Detail", "Very Detailed"], index=2)
-        if "Quiz" in deliverables:
-            mcq_count = st.slider("Quiz Questions", min_value=3, max_value=20, value=5)
-        else:
-            mcq_count = 5
-            
-    with set_col3:
-        language = st.selectbox("Answer Language", ["English", "Urdu", "Persian Urdu"])
+    tech_level = st.selectbox("Technicality Level", ["Beginner", "Intermediate", "Advanced"], index=1)
+    response_size = st.selectbox("Overall Detail Size", ["Short", "Medium", "Detail", "Very Detailed"], index=2)
+    language = st.selectbox("Answer Language", ["English", "Urdu", "Persian Urdu"])
+    
+    if "Notes" in deliverables:
+        notes_len = st.selectbox("Notes Length", ["Short (Summary)", "Medium (Outline)", "Long (Detailed)"], index=1)
+    else:
+        notes_len = "Medium (Outline)"
         
-        min_similarity = 0
-        if st.session_state.get("faiss_index") is not None:
-            min_similarity = st.slider("Document Match Strictness (%)", min_value=0, max_value=100, value=25, 
-                                       help="Higher % means the AI stays strictly to your PDF. Lower allows it to generate creatively.")
+    if "Quiz" in deliverables:
+        mcq_count = st.slider("Quiz Questions", min_value=3, max_value=20, value=5)
+    else:
+        mcq_count = 5
+        
+    min_similarity = 0
+    if st.session_state.get("faiss_index") is not None:
+        min_similarity = st.slider("Document Match Strictness (%)", min_value=0, max_value=100, value=25, 
+                                   help="Higher % means the AI stays strictly to your PDF. Lower allows it to generate creatively.")
 
+# ==========================================
+# MAIN PAGE: GENERATION LOGIC
+# ==========================================
 st.write("") # Spacer
 generate_btn = st.button("🚀 Generate Study Materials", type="primary", use_container_width=True)
 st.divider()
 
-# --- PHASE 1: DATA FETCHING ---
 if generate_btn:
     if not goals:
         st.error("⚠️ Please enter your learning goals before generating.")
@@ -180,7 +179,6 @@ if generate_btn:
     st.session_state.study_materials = {}
     st.session_state.current_tabs = deliverables
     
-    # Visual Progress Bar
     progress_bar = st.progress(0)
     
     for i, item in enumerate(deliverables):
@@ -237,7 +235,7 @@ if st.session_state.study_materials:
     
     for i, item in enumerate(st.session_state.current_tabs):
         with tabs[i]:
-            st.write("") # Padding inside tab
+            st.write("") 
             output = st.session_state.study_materials.get(item, "")
             
             if item in ["Study Plan", "Notes", "Exam Tips"]:
@@ -272,7 +270,6 @@ if st.session_state.study_materials:
                     st.error("Failed to parse JSON for Quiz. Here is the raw output:")
                     st.code(output)
 elif not generate_btn:
-    # Empty State Display
     st.markdown("""
         <div style='text-align: center; padding: 40px; color: #888;'>
             <h3>Ready to study?</h3>
