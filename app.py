@@ -18,7 +18,6 @@ if "study_materials" not in st.session_state:
 if "current_tabs" not in st.session_state:
     st.session_state.current_tabs = []
 
-# LAZY LOADING: PyTorch/SentenceTransformers will ONLY load when this function is called
 @st.cache_resource
 def load_embedder():
     from sentence_transformers import SentenceTransformer
@@ -45,9 +44,9 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Upload PDFs", type=['pdf'], accept_multiple_files=True)
 
     if st.button("Process Documents", use_container_width=True) and uploaded_files:
-        with st.spinner("Initializing AI embedding model (this takes a moment on first run)..."):
+        with st.spinner("Initializing AI embedding model..."):
             embedder = load_embedder()
-            import faiss  # LAZY LOADING: FAISS only imports if documents are actually processed
+            import faiss 
             
             all_text = ""
             for file in uploaded_files:
@@ -90,19 +89,32 @@ client = Groq(api_key=st.session_state.api_key)
 with st.container():
     col1, col2 = st.columns(2)
     with col1:
-        goals = st.text_input("Learning Goals", placeholder="e.g., Polycarbonate co-extrusion optimization")
+        goals = st.text_input("Learning Goals", placeholder="e.g., Polycarbonate co-extrusion parameters or LAT essay structure")
     with col2:
         duration = st.text_input("Study Duration", placeholder="e.g., 7 days, 4 hours")
+
+    st.subheader("Generation Settings")
+    col3, col4, col5 = st.columns(3)
+    
+    with col3:
+        tech_level = st.selectbox("Technicality Level", ["Beginner", "Intermediate", "Advanced"])
+    with col4:
+        response_size = st.selectbox("Response Size", ["Short", "Medium", "Detail", "Very Detailed"])
+    with col5:
+        language = st.selectbox("Answer Language", ["English", "Urdu", "Persian Urdu"])
+
+    # Document-specific settings
+    min_similarity = 0
+    if st.session_state.get("faiss_index") is not None:
+        st.markdown("**Document Search Settings**")
+        min_similarity = st.slider("Minimum Context Similarity (%)", min_value=0, max_value=100, value=25, 
+                                   help="Higher percentage requires a stricter match to your PDFs. If no chunks meet this threshold, the AI falls back to general knowledge.")
 
     st.subheader("Select Deliverables")
     deliverables = st.multiselect("What would you like to generate?", 
                                  ["Study Plan", "Notes", "Flashcards", "Exam Tips", "Quiz"])
     
-    notes_len = "Medium"
     mcq_count = 5
-    
-    if "Notes" in deliverables:
-        notes_len = st.selectbox("Notes Length", ["Short (Summary)", "Medium (Outline)", "Long (Detailed)"])
     if "Quiz" in deliverables:
         mcq_count = st.slider("Number of Quiz Questions", min_value=3, max_value=20, value=5)
 
@@ -114,38 +126,57 @@ if st.button("Generate Study Materials", type="primary"):
         
     context = ""
     
-    # ONLY boot up the embedder and search FAISS if a document was actually uploaded
     if st.session_state.get("faiss_index") is not None:
         with st.spinner("Retrieving relevant context from PDFs..."):
             embedder = load_embedder()
             query_embed = embedder.encode([goals])
-            D, I = st.session_state.faiss_index.search(np.array(query_embed), k=6)
-            context = "\n\n---\n\n".join([st.session_state.chunks[i] for i in I[0] if i < len(st.session_state.chunks)])
+            D, I = st.session_state.faiss_index.search(np.array(query_embed), k=8)
+            
+            # Convert percentage to FAISS L2 distance threshold
+            min_cos_sim = min_similarity / 100.0
+            l2_threshold = 2.0 - (2.0 * min_cos_sim)
+            
+            valid_chunks = []
+            for i in range(len(I[0])):
+                idx = I[0][i]
+                dist = D[0][i]
+                if idx < len(st.session_state.chunks) and dist <= l2_threshold:
+                    valid_chunks.append(st.session_state.chunks[idx])
+            
+            context = "\n\n---\n\n".join(valid_chunks)
+            if not context:
+                st.info("No document content met the strict similarity threshold. Proceeding with general AI knowledge.")
 
     st.session_state.study_materials = {}
     st.session_state.current_tabs = deliverables
     
     for item in deliverables:
-        with st.spinner(f"Generating {item}..."):
+        with st.spinner(f"Generating {item} in {language}..."):
             try:
-                strict_task = ""
-                fallback_task = ""
-                
+                # Dynamic modifier string for the prompt
+                modifiers = f"Target Audience: {tech_level}.\nLanguage: {language}.\n"
+                if item in ["Study Plan", "Notes", "Exam Tips"]:
+                    modifiers += f"Required Length/Detail: {response_size}.\n"
+
                 if item == "Study Plan":
-                    strict_task = f"Create a structured study plan for '{goals}' spanning '{duration}'. Use Markdown tables."
-                    fallback_task = f"Create a structured study plan for '{goals}' spanning '{duration}'. Use your general AI knowledge and format with Markdown tables."
+                    strict_task = f"Create a structured study plan for '{goals}' spanning '{duration}'. Use Markdown tables.\n{modifiers}"
+                    fallback_task = f"Create a structured study plan for '{goals}' spanning '{duration}'. Use your general AI knowledge and format with Markdown tables.\n{modifiers}"
+                
                 elif item == "Notes":
-                    strict_task = f"Generate {notes_len} notes for the topic: '{goals}'."
-                    fallback_task = f"Generate {notes_len} notes for the topic: '{goals}' using your general AI knowledge."
+                    strict_task = f"Generate notes for the topic: '{goals}'.\n{modifiers}"
+                    fallback_task = f"Generate notes for the topic: '{goals}' using your general AI knowledge.\n{modifiers}"
+                
                 elif item == "Exam Tips":
-                    strict_task = f"Provide top exam preparation tips and common pitfalls regarding: '{goals}'."
-                    fallback_task = f"Provide top exam preparation tips and common pitfalls regarding: '{goals}' using your general AI knowledge."
+                    strict_task = f"Provide top exam preparation tips and common pitfalls regarding: '{goals}'.\n{modifiers}"
+                    fallback_task = f"Provide top exam preparation tips and common pitfalls regarding: '{goals}' using your general AI knowledge.\n{modifiers}"
+                
                 elif item == "Flashcards":
-                    strict_task = f"Create 5-10 flashcards for '{goals}'. ONLY output valid JSON format: {{\"flashcards\": [{{\"term\": \"X\", \"definition\": \"Y\"}}]}}"
-                    fallback_task = f"Create 5-10 flashcards for '{goals}' using general AI knowledge. ONLY output valid JSON format: {{\"flashcards\": [{{\"term\": \"X\", \"definition\": \"Y\"}}]}}"
+                    strict_task = f"Create 5-10 flashcards for '{goals}'.\n{modifiers} ONLY output valid JSON format: {{\"flashcards\": [{{\"term\": \"X\", \"definition\": \"Y\"}}]}}"
+                    fallback_task = f"Create 5-10 flashcards for '{goals}' using general AI knowledge.\n{modifiers} ONLY output valid JSON format: {{\"flashcards\": [{{\"term\": \"X\", \"definition\": \"Y\"}}]}}"
+                
                 elif item == "Quiz":
-                    strict_task = f"Generate a multiple-choice quiz with {mcq_count} questions about '{goals}'. ONLY output valid JSON format: {{\"quiz\": [{{\"question\": \"Q\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"answer\": \"A\"}}]}}. Do NOT wrap in markdown."
-                    fallback_task = f"Generate a multiple-choice quiz with {mcq_count} questions about '{goals}' using general AI knowledge. ONLY output valid JSON format: {{\"quiz\": [{{\"question\": \"Q\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"answer\": \"A\"}}]}}. Do NOT wrap in markdown."
+                    strict_task = f"Generate a multiple-choice quiz with {mcq_count} questions about '{goals}'.\n{modifiers} ONLY output valid JSON format: {{\"quiz\": [{{\"question\": \"Q\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"answer\": \"A\"}}]}}. Do NOT wrap in markdown."
+                    fallback_task = f"Generate a multiple-choice quiz with {mcq_count} questions about '{goals}' using general AI knowledge.\n{modifiers} ONLY output valid JSON format: {{\"quiz\": [{{\"question\": \"Q\", \"options\": [\"A\", \"B\", \"C\", \"D\"], \"answer\": \"A\"}}]}}. Do NOT wrap in markdown."
 
                 output = ""
 
@@ -155,7 +186,7 @@ if st.button("Generate Study Materials", type="primary"):
                     output = res.choices[0].message.content.strip()
 
                     if output == "CONTEXT_MISSING":
-                        st.info(f"💡 '{goals}' was not found in your uploaded PDFs. Generating {item} using general AI knowledge.")
+                        st.info(f"💡 Uploaded documents lacked specific details for '{item}'. Generating using general AI knowledge.")
                         fallback_res = client.chat.completions.create(model=MODEL_NAME, messages=[{"role": "user", "content": fallback_task}])
                         output = fallback_res.choices[0].message.content.strip()
                 
